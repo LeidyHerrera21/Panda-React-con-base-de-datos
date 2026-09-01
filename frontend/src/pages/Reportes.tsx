@@ -9,7 +9,20 @@ export const Reportes: React.FC = () => {
   const [nombreArchivo, setNombreArchivo] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Manejar la lectura del archivo Excel
+  // Guardar en el historial de localStorage
+  const registrarEnHistorial = (nombre: string, cantidadFilas: number, formato: 'PDF' | 'CSV' | 'EXCEL') => {
+    const reportesPrevios = JSON.parse(localStorage.getItem('reportes_guardados') || '[]');
+    const nuevoReporte = {
+      id: Date.now().toString(),
+      nombre: `Excel: ${nombre}`,
+      fecha: new Date().toISOString().split('T')[0],
+      formato,
+      registros: cantidadFilas,
+    };
+    const listaActualizada = [nuevoReporte, ...reportesPrevios];
+    localStorage.setItem('reportes_guardados', JSON.stringify(listaActualizada));
+  };
+
   const manejarSubidaExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -23,19 +36,20 @@ export const Reportes: React.FC = () => {
       const primeraHoja = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[primeraHoja];
       
-      // Convertir a JSON
       const jsonDatos = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
 
       if (jsonDatos.length > 0) {
         setColumnas(Object.keys(jsonDatos[0]));
         setDatosTabla(jsonDatos);
+        
+        // Auto-guardar entrada en el Dashboard
+        registrarEnHistorial(file.name, jsonDatos.length, 'EXCEL');
       }
     };
 
     reader.readAsBinaryString(file);
   };
 
-  // Exportar datos (ya sean subidos o datos por defecto)
   const exportarCSV = () => {
     if (datosTabla.length === 0) return;
     setDescargando('csv');
@@ -54,6 +68,8 @@ export const Reportes: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      registrarEnHistorial(nombreArchivo || 'Exportación', datosTabla.length, 'CSV');
       setDescargando(null);
     }, 300);
   };
@@ -64,7 +80,6 @@ export const Reportes: React.FC = () => {
 
     setTimeout(() => {
       const doc = new jsPDF();
-      
       doc.setFillColor(15, 23, 42);
       doc.rect(0, 0, 210, 25, 'F');
       doc.setTextColor(255, 255, 255);
@@ -77,8 +92,6 @@ export const Reportes: React.FC = () => {
 
       let y = 45;
       doc.setFontSize(9);
-      
-      // Renderizar Encabezados
       let x = 14;
       const anchoCol = Math.min(180 / columnas.length, 40);
 
@@ -92,7 +105,6 @@ export const Reportes: React.FC = () => {
       });
 
       y += 8;
-      // Renderizar Filas
       datosTabla.slice(0, 25).forEach((row) => {
         x = 14;
         columnas.slice(0, 5).forEach((col) => {
@@ -103,24 +115,24 @@ export const Reportes: React.FC = () => {
       });
 
       doc.save(`reporte_${new Date().toISOString().slice(0, 10)}.pdf`);
+      registrarEnHistorial(nombreArchivo || 'Exportación', datosTabla.length, 'PDF');
       setDescargando(null);
     }, 300);
   };
 
   return (
-    <div className="dashboard-container">
+    <div className="dashboard-container" style={{ padding: '20px' }}>
       <h2 className="dashboard-title">Generación de Reportes</h2>
       
-      <div className="widget-card">
-        <h3 className="widget-title" style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
-          Cargar y Exportar Datos
+      <div className="widget-card" style={{ background: '#fff', padding: '20px', borderRadius: '8px' }}>
+        <h3 className="widget-title" style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#1e293b' }}>
+          Cargar y Exportar Archivos
         </h3>
         <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '20px' }}>
-          Sube un archivo Excel para visualizarlo en pantalla o exporta la información a PDF y CSV.
+          Los archivos subidos se sincronizan automáticamente con el Panel de Control.
         </p>
 
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Botón Oculto e Input de Archivo */}
           <input
             type="file"
             accept=".xlsx, .xls"
@@ -131,15 +143,7 @@ export const Reportes: React.FC = () => {
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            style={{
-              padding: '10px 20px',
-              background: '#0284c7',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
+            style={{ padding: '10px 20px', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
           >
             Subir Excel
           </button>
@@ -147,15 +151,7 @@ export const Reportes: React.FC = () => {
           <button
             onClick={exportarCSV}
             disabled={datosTabla.length === 0 || descargando !== null}
-            style={{
-              padding: '10px 20px',
-              background: datosTabla.length === 0 ? '#94a3b8' : '#059669',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: datosTabla.length === 0 ? 'not-allowed' : 'pointer',
-              fontWeight: 600,
-            }}
+            style={{ padding: '10px 20px', background: datosTabla.length === 0 ? '#94a3b8' : '#059669', color: '#fff', border: 'none', borderRadius: '6px', cursor: datosTabla.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 600 }}
           >
             {descargando === 'csv' ? 'Exportando...' : 'Exportar CSV'}
           </button>
@@ -163,15 +159,7 @@ export const Reportes: React.FC = () => {
           <button
             onClick={exportarPDF}
             disabled={datosTabla.length === 0 || descargando !== null}
-            style={{
-              padding: '10px 20px',
-              background: datosTabla.length === 0 ? '#94a3b8' : '#dc2626',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: datosTabla.length === 0 ? 'not-allowed' : 'pointer',
-              fontWeight: 600,
-            }}
+            style={{ padding: '10px 20px', background: datosTabla.length === 0 ? '#94a3b8' : '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: datosTabla.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 600 }}
           >
             {descargando === 'pdf' ? 'Exportando...' : 'Exportar PDF'}
           </button>
@@ -179,15 +167,14 @@ export const Reportes: React.FC = () => {
 
         {nombreArchivo && (
           <p style={{ marginTop: '12px', color: '#0284c7', fontSize: '0.85rem', fontWeight: 600 }}>
-            Archivo cargado: {nombreArchivo} ({datosTabla.length} registros)
+            ✓ Archivo cargado y registrado en el Panel: {nombreArchivo} ({datosTabla.length} registros)
           </p>
         )}
       </div>
 
-      {/* Tabla de previsualización */}
       {datosTabla.length > 0 && (
-        <div className="widget-card" style={{ marginTop: '20px', overflowX: 'auto' }}>
-          <h3 className="widget-title" style={{ marginBottom: '16px' }}>VISTA PREVIA DEL EXCEL</h3>
+        <div className="widget-card" style={{ marginTop: '20px', background: '#fff', padding: '20px', borderRadius: '8px', overflowX: 'auto' }}>
+          <h3 className="widget-title" style={{ marginBottom: '16px', color: '#1e293b' }}>VISTA PREVIA DEL EXCEL</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>
